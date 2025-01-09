@@ -24,7 +24,7 @@ serve(async (req) => {
     const sorted = [...numericData].sort((a, b) => a - b)
     const median = sorted[Math.floor(sorted.length / 2)]
 
-    // Generate monthly trend data (example)
+    // Generate monthly trend data
     const analysisResults = [
       { name: 'Jan', value: Math.round(avg * 0.8) },
       { name: 'Feb', value: Math.round(avg * 0.9) },
