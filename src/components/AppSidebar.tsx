@@ -5,6 +5,7 @@ import {
   LineChart,
   Settings,
 } from "lucide-react"
+import { Link, useLocation } from "react-router-dom"
 
 import {
   Sidebar,
@@ -46,6 +47,8 @@ const items = [
 ]
 
 export function AppSidebar() {
+  const location = useLocation()
+
   return (
     <Sidebar>
       <SidebarContent>
@@ -56,11 +59,14 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
+                    asChild
                     tooltip={item.title}
-                    isActive={item.url === window.location.pathname}
+                    isActive={item.url === location.pathname}
                   >
-                    <item.icon />
-                    <span>{item.title}</span>
+                    <Link to={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
