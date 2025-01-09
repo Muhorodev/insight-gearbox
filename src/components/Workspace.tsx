@@ -8,6 +8,13 @@ import { AnalysisResults } from "@/components/AnalysisResults"
 import { supabase } from "@/lib/supabase"
 import * as XLSX from 'xlsx'
 
+interface UploadedFile {
+  id: string;
+  filename: string;
+  storage_path: string;
+  file_size: number;
+}
+
 export const Workspace = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [excelData, setExcelData] = useState<any[][] | null>(null)
@@ -61,15 +68,15 @@ export const Workspace = () => {
         const { error: rawDataError } = await supabase
           .from('raw_data')
           .insert(
-            jsonData.slice(1).map((row: any) => ({
-              file_id: fileData.id,
+            (jsonData as any[]).slice(1).map((row) => ({
+              file_id: (fileData as UploadedFile).id,
               data: row,
             }))
           )
 
         if (rawDataError) throw rawDataError
 
-        setExcelData(jsonData)
+        setExcelData(jsonData as any[][])
         toast({
           title: "File uploaded successfully",
           description: "Your Excel file has been processed and stored",
@@ -112,12 +119,16 @@ export const Workspace = () => {
 
   const handleSave = async () => {
     try {
+      if (!excelData || !excelData[0]) {
+        throw new Error("No data to save")
+      }
+
       // Save current state to Supabase
       const { error } = await supabase
         .from('analysis_results')
         .insert([
           {
-            file_id: excelData?.[0]?.id,
+            file_id: (excelData[0] as any).id,
             results: analysisData,
           }
         ])
