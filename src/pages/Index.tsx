@@ -1,14 +1,24 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/AppSidebar"
+import { Workspace } from "@/components/Workspace"
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-background">
+        <AppSidebar />
+        <div className="flex-1 flex flex-col">
+          <header className="h-14 border-b flex items-center px-6">
+            <SidebarTrigger />
+            <h1 className="text-xl font-semibold ml-4">
+              Decision Support System
+            </h1>
+          </header>
+          <Workspace />
+        </div>
       </div>
-    </div>
-  );
-};
+    </SidebarProvider>
+  )
+}
 
-export default Index;
+export default Index
