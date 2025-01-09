@@ -5,11 +5,14 @@ import { useToast } from "@/hooks/use-toast"
 import { DataTable } from "@/components/DataTable"
 import { ActionButtons } from "@/components/ActionButtons"
 import { AnalysisResults } from "@/components/AnalysisResults"
+import { supabase } from "@/lib/supabase"
+import * as XLSX from 'xlsx'
 
 export const Workspace = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [excelData, setExcelData] = useState<any[][] | null>(null)
   const [analysisData, setAnalysisData] = useState<any[] | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -21,7 +24,70 @@ export const Workspace = () => {
     setIsDragging(false)
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const processExcelFile = async (file: File) => {
+    const reader = new FileReader()
+    
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result
+        const workbook = XLSX.read(data, { type: 'binary' })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+        
+        // Upload file to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('excel-files')
+          .upload(`${Date.now()}-${file.name}`, file)
+
+        if (uploadError) throw uploadError
+
+        // Store file metadata
+        const { data: fileData, error: fileError } = await supabase
+          .from('uploaded_files')
+          .insert([
+            {
+              filename: file.name,
+              storage_path: uploadData.path,
+              file_size: file.size,
+            }
+          ])
+          .select()
+          .single()
+
+        if (fileError) throw fileError
+
+        // Store raw data
+        const { error: rawDataError } = await supabase
+          .from('raw_data')
+          .insert(
+            jsonData.slice(1).map((row: any) => ({
+              file_id: fileData.id,
+              data: row,
+            }))
+          )
+
+        if (rawDataError) throw rawDataError
+
+        setExcelData(jsonData)
+        toast({
+          title: "File uploaded successfully",
+          description: "Your Excel file has been processed and stored",
+        })
+      } catch (error: any) {
+        console.error('Error processing file:', error)
+        toast({
+          variant: "destructive",
+          title: "Error processing file",
+          description: error.message,
+        })
+      }
+    }
+
+    reader.readAsBinaryString(file)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
     
@@ -32,18 +98,9 @@ export const Workspace = () => {
     )
 
     if (excelFiles.length > 0) {
-      // Mock data for demonstration
-      setExcelData([
-        ["Name", "Age", "City"],
-        ["John Doe", 30, "New York"],
-        ["Jane Smith", 25, "Los Angeles"],
-        ["Bob Johnson", 35, "Chicago"],
-      ])
-      
-      toast({
-        title: "Files received",
-        description: `Uploaded ${excelFiles.length} Excel ${excelFiles.length === 1 ? 'file' : 'files'}`,
-      })
+      setIsLoading(true)
+      await processExcelFile(excelFiles[0])
+      setIsLoading(false)
     } else {
       toast({
         variant: "destructive",
@@ -53,11 +110,31 @@ export const Workspace = () => {
     }
   }
 
-  const handleSave = () => {
-    toast({
-      title: "Changes saved",
-      description: "Your changes have been saved successfully",
-    })
+  const handleSave = async () => {
+    try {
+      // Save current state to Supabase
+      const { error } = await supabase
+        .from('analysis_results')
+        .insert([
+          {
+            file_id: excelData?.[0]?.id,
+            results: analysisData,
+          }
+        ])
+
+      if (error) throw error
+
+      toast({
+        title: "Changes saved",
+        description: "Your changes have been saved successfully",
+      })
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error saving changes",
+        description: error.message,
+      })
+    }
   }
 
   const handleEdit = () => {
@@ -76,20 +153,31 @@ export const Workspace = () => {
     })
   }
 
-  const handleAnalyze = () => {
-    // Mock analysis data for demonstration
-    setAnalysisData([
-      { name: "Jan", value: 400 },
-      { name: "Feb", value: 300 },
-      { name: "Mar", value: 600 },
-      { name: "Apr", value: 800 },
-      { name: "May", value: 500 },
-    ])
-    
-    toast({
-      title: "Analysis complete",
-      description: "Data analysis has been completed",
-    })
+  const handleAnalyze = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Call Supabase Edge Function for analysis
+      const { data, error } = await supabase.functions.invoke('analyze-data', {
+        body: { data: excelData }
+      })
+
+      if (error) throw error
+
+      setAnalysisData(data)
+      toast({
+        title: "Analysis complete",
+        description: "Data analysis has been completed",
+      })
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Analysis error",
+        description: error.message,
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -115,8 +203,8 @@ export const Workspace = () => {
           <p className="text-sm text-gray-500 mb-4">
             or click to select files
           </p>
-          <Button>
-            Select Files
+          <Button disabled={isLoading}>
+            {isLoading ? "Processing..." : "Select Files"}
           </Button>
         </div>
       ) : (
@@ -126,6 +214,7 @@ export const Workspace = () => {
             onEdit={handleEdit}
             onClose={handleClose}
             onAnalyze={handleAnalyze}
+            disabled={isLoading}
           />
           <DataTable data={excelData} />
           {analysisData && <AnalysisResults data={analysisData} />}
